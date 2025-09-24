@@ -1,0 +1,67 @@
+name: 'Quant Cloud Environment Backup'
+description: 'Creates and manages backups of environments in Quant Cloud'
+branding:
+  icon: 'cloud'
+  color: 'blue'
+inputs:
+  api_key:
+    description: 'Quant API key'
+    required: true
+  organization:
+    description: 'Quant organisation ID'
+    required: true
+  app_name:
+    description: 'Name of your application'
+    required: true
+  environment_name:
+    description: 'Name of the environment to backup'
+    required: true
+  base_url:
+    description: 'Quant Cloud API URL'
+    required: false
+    default: 'https://dashboard.quantcdn.io/api/v3'
+  operation:
+    description: 'Operation to perform: create, list, or download'
+    required: false
+    default: 'create'
+  backup_name:
+    description: 'Name for the backup (for create operation)'
+    required: false
+  backup_id:
+    description: 'ID of the backup to download (for download operation). Use "latest" to automatically download the most recent backup.'
+    required: false
+  wait:
+    description: 'Whether to wait for the backup to complete'
+    required: false
+    default: 'false'
+  wait_interval:
+    description: 'Interval in seconds to wait for the backup to complete'
+    required: false
+    default: '10'
+  max_retries:
+    description: 'Maximum number of retries before timing out'
+    required: false
+    default: '30'
+  type:
+    description: 'Type of data to backup'
+    required: false
+    default: 'database'
+outputs:
+  backup_id:
+    description: 'ID of the created backup (create operation)'
+  backup_list:
+    description: 'JSON array of available backups (list operation)'
+  download_url:
+    description: 'Download URL for the backup (download operation)'
+  resolved_backup_id:
+    description: 'Actual backup ID when using "latest" (download operation)'
+  resolved_backup_name:
+    description: 'Name of the resolved backup when using "latest" (download operation)'
+  resolved_backup_created_at:
+    description: 'Creation timestamp of the resolved backup when using "latest" (download operation)'
+  success:
+    description: 'Whether the operation was successful'
+    value: true
+runs:
+  using: 'node20'
+  main: 'dist/index.js' 

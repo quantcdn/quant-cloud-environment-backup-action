@@ -1,0 +1,27 @@
+version: 2
+updates:
+  # Enable version updates for npm
+  - package-ecosystem: "npm"
+    directory: "/"
+    schedule:
+      interval: "weekly"
+      day: "monday"
+      time: "09:00"
+    open-pull-requests-limit: 10
+    reviewers:
+      - "stevenworley"
+    assignees:
+      - "stevenworley"
+    commit-message:
+      prefix: "deps"
+      include: "scope"
+    labels:
+      - "dependencies"
+      - "javascript"
+    # Allow updates to devDependencies
+    allow:
+      - dependency-type: "development"
+    # Ignore major version updates for now
+    ignore:
+      - dependency-name: "*"
+        update-types: ["version-update:semver-major"]
