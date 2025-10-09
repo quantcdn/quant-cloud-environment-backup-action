@@ -21,14 +21,24 @@ inputs:
     required: false
     default: 'https://dashboard.quantcdn.io/api/v3'
   operation:
-    description: 'Operation to perform: create, list, or download'
+    description: 'Operation to perform: create, list, download, or delete'
     required: false
     default: 'create'
   backup_name:
     description: 'Name for the backup (for create operation)'
     required: false
   backup_id:
-    description: 'ID of the backup to download (for download operation). Use "latest" to automatically download the most recent backup.'
+    description: 'ID of the backup to download/delete. Use "latest" for most recent (download), or specify backup ID (download/delete).'
+    required: false
+  older_than_days:
+    description: 'For delete operation: Delete backups older than this many days'
+    required: false
+  sort_order:
+    description: 'For list operation: Sort order by creation date (asc or desc)'
+    required: false
+    default: 'desc'
+  filter_status:
+    description: 'For list operation: Filter by backup status (e.g., completed, failed, in_progress)'
     required: false
   wait:
     description: 'Whether to wait for the backup to complete'
@@ -59,6 +69,10 @@ outputs:
     description: 'Name of the resolved backup when using "latest" (download operation)'
   resolved_backup_created_at:
     description: 'Creation timestamp of the resolved backup when using "latest" (download operation)'
+  deleted_count:
+    description: 'Number of backups deleted (delete operation)'
+  deleted_backups:
+    description: 'JSON array of deleted backup IDs (delete operation)'
   success:
     description: 'Whether the operation was successful'
     value: true

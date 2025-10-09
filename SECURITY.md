@@ -62,7 +62,7 @@ When using this GitHub Action, please follow these security best practices:
 
 This action depends on the following packages:
 - `@actions/core` - GitHub's official core actions library
-- `quant-ts-client` - Official Quant CDN TypeScript client
+- `@quantcdn/quant-client` - Official Quant CDN TypeScript client
 
 We monitor these dependencies for security vulnerabilities and update them regularly.
 

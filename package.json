@@ -4,18 +4,19 @@
   "description": "GitHub Action for creating and managing backups of environments in Quant Cloud",
   "main": "dist/index.js",
   "scripts": {
-    "build": "ncc build src/index.ts",
+    "build": "./node_modules/.bin/ncc build src/index.ts -o dist",
     "test": "jest",
-    "prepare": "husky"
+    "test:local": "npm run build && node test-local.js",
+    "test:ops": "node test-operations.js"
   },
   "dependencies": {
     "@actions/core": "^1.10.0",
-    "quant-ts-client": "github:quantcdn/quant-ts-client#v3"
+    "@quantcdn/quant-client": "^3.0.0"
   },
   "devDependencies": {
-    "@types/node": "^20.0.0",
-    "@vercel/ncc": "^0.38.3",
-    "husky": "^9.1.7",
-    "typescript": "^5.0.0"
+    "@types/node": "^20.19.19",
+    "@vercel/ncc": "^0.38.4",
+    "ts-node": "^10.9.2",
+    "typescript": "^5.9.3"
   }
 }

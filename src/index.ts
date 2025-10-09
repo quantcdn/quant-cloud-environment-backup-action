@@ -1,85 +1,10 @@
 import * as core from '@actions/core';
 import {
     Environment,
-    EnvironmentsApi
-    // TODO: Import BackupManagementApi and CreateBackupRequest when available
-    // BackupManagementApi,
-    // CreateBackupRequest
-} from 'quant-ts-client';
-
-// TODO: Replace these with actual imports when available in quant-ts-client
-interface BackupManagementApi {
-    setDefaultAuthentication: (opts: any) => void;
-    createBackup: (org: string, app: string, env: string, request: CreateBackupRequest) => Promise<{ body: { id: string, name: string, status: string } }>;
-    listBackups: (org: string, app: string, env?: string) => Promise<{ body: Array<{ id: string, name: string, status: string, createdAt: string }> }>;
-    getBackup: (org: string, app: string, env: string, backupId: string) => Promise<{ body: { id: string, name: string, status: string } }>;
-    downloadBackup: (org: string, app: string, env: string, backupId: string) => Promise<{ body: { downloadUrl?: string, url?: string } }>;
-}
-
-interface CreateBackupRequest {
-    name: string;
-    type: string;
-}
-
-// Mock BackupManagementApi class - TODO: Replace with actual import
-class BackupManagementApiImpl implements BackupManagementApi {
-    private baseUrl: string;
-    private authOpts: any;
-
-    constructor(baseUrl: string) {
-        this.baseUrl = baseUrl;
-    }
-
-    setDefaultAuthentication(opts: any) {
-        this.authOpts = opts;
-    }
-
-    async createBackup(org: string, app: string, env: string, request: CreateBackupRequest) {
-        // TODO: Replace with actual API call when BackupManagementApi is available
-        core.warning('Using mock BackupManagementApi. Replace with actual implementation when available in quant-ts-client.');
-        return {
-            body: {
-                id: `mock-backup-${Date.now()}`,
-                name: request.name,
-                status: 'in_progress'
-            }
-        };
-    }
-
-    async listBackups(org: string, app: string, env?: string) {
-        // TODO: Replace with actual API call when BackupManagementApi is available  
-        core.warning('Using mock BackupManagementApi. Replace with actual implementation when available in quant-ts-client.');
-        return {
-            body: [
-                { id: 'backup-1', name: 'mock-backup-1', status: 'completed', createdAt: '2024-01-15T10:00:00Z' },
-                { id: 'backup-2', name: 'mock-backup-2', status: 'completed', createdAt: '2024-01-14T10:00:00Z' }
-            ]
-        };
-    }
-
-    async getBackup(org: string, app: string, env: string, backupId: string) {
-        // TODO: Replace with actual API call when BackupManagementApi is available
-        core.warning('Using mock BackupManagementApi. Replace with actual implementation when available in quant-ts-client.');
-        return {
-            body: {
-                id: backupId,
-                name: 'mock-backup',
-                status: 'completed'
-            }
-        };
-    }
-
-    async downloadBackup(org: string, app: string, env: string, backupId: string) {
-        // TODO: Replace with actual API call when BackupManagementApi is available
-        core.warning('Using mock BackupManagementApi. Replace with actual implementation when available in quant-ts-client.');
-        return {
-            body: {
-                downloadUrl: `https://mock-download-url.com/backups/${backupId}/download`,
-                url: `https://mock-download-url.com/backups/${backupId}/download`
-            }
-        };
-    }
-}
+    EnvironmentsApi,
+    BackupManagementApi,
+    CreateBackupRequest
+} from '@quantcdn/quant-client';
 
 const apiOpts = (apiKey: string) => {
     return {
@@ -135,12 +60,15 @@ async function run(): Promise<void> {
         const operation = core.getInput('operation', { required: false }) || 'create';
         const backupName = core.getInput('backup_name', { required: false });
         const backupId = core.getInput('backup_id', { required: false });
+        const olderThanDays = core.getInput('older_than_days', { required: false });
+        const sortOrder = core.getInput('sort_order', { required: false }) || 'desc';
+        const filterStatus = core.getInput('filter_status', { required: false });
         const type = core.getInput('type', { required: false }) || 'database';
 
         const environmentsClient = new EnvironmentsApi(baseUrl);
         environmentsClient.setDefaultAuthentication(apiOpts(apiKey));
 
-        const backupClient = new BackupManagementApiImpl(baseUrl);
+        const backupClient = new BackupManagementApi(baseUrl);
         backupClient.setDefaultAuthentication(apiOpts(apiKey));
 
         core.info('Quant Cloud Environment Backup Action');
@@ -149,24 +77,28 @@ async function run(): Promise<void> {
             throw new Error(`Invalid type: ${type}`);
         }
 
-        if (!['create', 'list', 'download'].includes(operation)) {
-            throw new Error(`Invalid operation: ${operation}. Must be one of: create, list, download`);
+        if (!['create', 'list', 'download', 'delete'].includes(operation)) {
+            throw new Error(`Invalid operation: ${operation}. Must be one of: create, list, download, delete`);
         }
 
         if (operation === 'download' && !backupId) {
             throw new Error('backup_id is required for download operation');
         }
 
+        if (operation === 'delete' && !backupId && !olderThanDays) {
+            throw new Error('Either backup_id or older_than_days is required for delete operation');
+        }
+
         // For list operations, we might not need to validate the environment exists
         // But for create and download, we should validate
         if (operation !== 'list') {
-            let environment: Environment;
-            try {
+        let environment: Environment;
+        try {
                 environment = (await environmentsClient.getEnvironment(organisation, appName, environmentName)).body;
-                core.info(`Environment ${environmentName} exists`);
-            } catch (error) {
-                throw new Error(`Environment ${environmentName} does not exist`);
-            }
+            core.info(`Environment ${environmentName} exists`);
+        } catch (error) {
+            throw new Error(`Environment ${environmentName} does not exist`);
+        }
         }
 
         let result: any = {};
@@ -176,26 +108,37 @@ async function run(): Promise<void> {
                 core.info(`Creating ${type} backup for environment ${environmentName}`);
 
                 const request: CreateBackupRequest = {
-                    name: backupName || `backup-${environmentName}-${Date.now()}`,
-                    type: type as any, // Cast to the expected type
+                    description: backupName || `backup-${environmentName}-${Date.now()}`,
                 }
 
-                const backup = await backupClient.createBackup(organisation, appName, environmentName, request);
+                const backup = await backupClient.createBackup(organisation, appName, environmentName, type as 'database' | 'filesystem', request);
                 result.backup = backup.body;
                 
                 core.info(`Created ${type} backup for environment ${environmentName}`);
-                core.info(`Backup ID: ${backup.body.id}`);
+                core.info(`Backup ID: ${backup.body.backupId}`);
                 break;
 
             case 'list':
                 core.info(`Listing backups for environment ${environmentName || 'all environments'}`);
+                if (sortOrder) core.info(`Sort order: ${sortOrder}`);
+                if (filterStatus) core.info(`Filtering by status: ${filterStatus}`);
 
-                const backupList = await backupClient.listBackups(organisation, appName, environmentName);
-                result.backups = backupList.body;
+                const listResponse = await backupClient.listBackups(
+                    organisation, 
+                    appName, 
+                    environmentName, 
+                    type as 'database' | 'filesystem',
+                    sortOrder as 'asc' | 'desc' | undefined,
+                    undefined, // limit
+                    undefined, // createdBefore
+                    undefined, // createdAfter
+                    filterStatus as 'completed' | 'failed' | 'running' | undefined
+                );
+                result.backups = listResponse.body.backups || [];
                 
-                core.info(`Found ${backupList.body.length} backups`);
-                backupList.body.forEach((backup: any, index: number) => {
-                    core.info(`  ${index + 1}. ID: ${backup.id}, Name: ${backup.name}, Status: ${backup.status}, Created: ${backup.createdAt}`);
+                core.info(`Found ${result.backups.length} backups`);
+                result.backups.forEach((backup: any, index: number) => {
+                    core.info(`  ${index + 1}. ID: ${backup.backupId}, Description: ${backup.description || 'N/A'}, Status: ${backup.status}, Created: ${backup.createdAt}`);
                 });
                 break;
 
@@ -207,78 +150,160 @@ async function run(): Promise<void> {
                 if (backupId === 'latest') {
                     core.info(`Resolving 'latest' backup for environment ${environmentName}`);
                     
-                    const backupList = await backupClient.listBackups(organisation, appName, environmentName);
-                    if (!backupList.body || backupList.body.length === 0) {
+                    const backupListResponse = await backupClient.listBackups(
+                        organisation, 
+                        appName, 
+                        environmentName, 
+                        type as 'database' | 'filesystem',
+                        'desc' // Get newest first
+                    );
+                    const backups = backupListResponse.body.backups || [];
+                    
+                    if (backups.length === 0) {
                         throw new Error(`No backups found for environment ${environmentName}`);
                     }
                     
-                    // Sort backups by creation date (newest first) and get the latest
-                    const sortedBackups = backupList.body.sort((a: any, b: any) => {
-                        return new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime();
-                    });
+                    // First backup is the latest (sorted desc by default)
+                    const latestBackup = backups[0];
+                    actualBackupId = latestBackup.backupId!;
                     
-                    const latestBackup = sortedBackups[0];
-                    actualBackupId = latestBackup.id;
-                    
-                    core.info(`Latest backup resolved: ${latestBackup.name} (ID: ${actualBackupId}, Created: ${latestBackup.createdAt})`);
+                    core.info(`Latest backup resolved: ${latestBackup.description || 'N/A'} (ID: ${actualBackupId}, Created: ${latestBackup.createdAt})`);
                     result = {
                         resolvedBackupId: actualBackupId,
-                        resolvedBackupName: latestBackup.name,
+                        resolvedBackupName: latestBackup.description,
                         resolvedBackupCreatedAt: latestBackup.createdAt
                     };
                 }
 
                 core.info(`Downloading backup ${actualBackupId} from environment ${environmentName}`);
 
-                // First get the backup details to ensure it exists
-                const backupDetails = await backupClient.getBackup(organisation, appName, environmentName, actualBackupId);
-                core.info(`Backup found: ${backupDetails.body.name} (Status: ${backupDetails.body.status})`);
-
-                // Get download URL - this method name might vary based on the actual API
-                try {
-                    const downloadResponse = await backupClient.downloadBackup(organisation, appName, environmentName, actualBackupId);
-                    const downloadUrl = downloadResponse.body.downloadUrl || downloadResponse.body.url;
-                    result = { ...result, downloadUrl };
-                    core.info(`Download URL obtained: ${downloadUrl}`);
-                } catch (error) {
-                    // Fallback: try to get backup download URL differently if the method name is different
-                    core.warning('downloadBackup method failed, trying alternative approach...');
-                    // The actual method might be getBackupDownloadUrl or similar
-                    const downloadUrl = `${baseUrl}/organizations/${organisation}/apps/${appName}/environments/${environmentName}/backups/${actualBackupId}/download`;
-                    result = { ...result, downloadUrl };
-                    core.info(`Using constructed download URL: ${downloadUrl}`);
+                // Get download URL
+                const downloadResponse = await backupClient.downloadBackup(
+                    organisation, 
+                    appName, 
+                    environmentName, 
+                    type as 'database' | 'filesystem',
+                    actualBackupId
+                );
+                const downloadUrl = downloadResponse.body.downloadUrl;
+                result = { ...result, downloadUrl };
+                core.info(`Download URL obtained: ${downloadUrl}`);
+                if (downloadResponse.body.expiresAt) {
+                    core.info(`URL expires at: ${downloadResponse.body.expiresAt}`);
                 }
+                break;
+
+            case 'delete':
+                const deletedBackups: string[] = [];
+                
+                if (backupId) {
+                    // Delete specific backup by ID
+                    core.info(`Deleting backup ${backupId} from environment ${environmentName}`);
+                    
+                    const deleteResponse = await backupClient.deleteBackup(
+                        organisation, 
+                        appName, 
+                        environmentName, 
+                        type as 'database' | 'filesystem',
+                        backupId
+                    );
+                    deletedBackups.push(backupId);
+                    
+                    core.info(`Backup ${backupId} deleted successfully`);
+                } else if (olderThanDays) {
+                    // Delete backups older than specified days
+                    const daysNum = parseInt(olderThanDays);
+                    const cutoffDate = new Date();
+                    cutoffDate.setDate(cutoffDate.getDate() - daysNum);
+                    
+                    core.info(`Deleting backups older than ${daysNum} days (before ${cutoffDate.toISOString()})`);
+                    
+                    // List all backups to find old ones
+                    const allBackupsResponse = await backupClient.listBackups(
+                        organisation, 
+                        appName, 
+                        environmentName, 
+                        type as 'database' | 'filesystem'
+                    );
+                    const allBackups = allBackupsResponse.body.backups || [];
+                    
+                    // Filter backups older than cutoff date
+                    const oldBackups = allBackups.filter((backup: any) => {
+                        const backupDate = new Date(backup.createdAt);
+                        return backupDate < cutoffDate;
+                    });
+                    
+                    core.info(`Found ${oldBackups.length} backups older than ${daysNum} days`);
+                    
+                    // Delete each old backup
+                    for (const backup of oldBackups) {
+                        try {
+                            core.info(`Deleting backup: ${backup.description || 'N/A'} (${backup.backupId}) created at ${backup.createdAt}`);
+                            await backupClient.deleteBackup(
+                                organisation, 
+                                appName, 
+                                environmentName, 
+                                type as 'database' | 'filesystem',
+                                backup.backupId!
+                            );
+                            deletedBackups.push(backup.backupId!);
+                            core.info(`✓ Deleted backup ${backup.backupId}`);
+                        } catch (error) {
+                            core.warning(`Failed to delete backup ${backup.backupId}: ${error}`);
+                        }
+                    }
+                }
+                
+                result.deletedBackups = deletedBackups;
+                result.deletedCount = deletedBackups.length;
+                
+                core.info(`Deleted ${deletedBackups.length} backup(s)`);
                 break;
 
             default:
                 throw new Error(`Unsupported operation: ${operation}`);
         }
 
-        // Only wait for create operations
+        // Wait for backup completion if requested
         if (operation === 'create' && core.getInput('wait') === 'true') {
-            core.info(`Waiting for backup to complete`);
+            core.info(`Waiting for backup to complete...`);
             let loop = true;
             let retries = 0;
             const waitInterval = parseInt(core.getInput('wait_interval') || '10');
             const maxRetries = parseInt(core.getInput('max_retries') || '30');
+            const backupIdToCheck = result.backup.backupId;
+            
             while (loop) {
                 try {
-                    // Get backup status
-                    const backupStatus = await backupClient.getBackup(organisation, appName, environmentName, result.backup.id);
+                    // Check backup status by listing backups and finding ours
+                    const backupsResponse = await backupClient.listBackups(
+                        organisation, 
+                        appName, 
+                        environmentName, 
+                        type as 'database' | 'filesystem'
+                    );
+                    const backups = backupsResponse.body.backups || [];
+                    const currentBackup = backups.find((b: any) => b.backupId === backupIdToCheck);
                     
-                    switch (backupStatus.body.status) {
-                        case 'completed':
-                            core.info(`Backup completed`);
-                            result.backup = backupStatus.body; // Update with latest status
-                            loop = false;
-                            break;
-                        case 'failed':
-                            throw new Error(`Backup failed`);
-                        case 'in_progress':
-                        case 'running':
-                        default:
-                            core.info(`Backup in progress`);
-                            break;
+                    if (!currentBackup) {
+                        core.warning(`Backup ${backupIdToCheck} not found in list. It may still be initializing...`);
+                    } else {
+                        core.info(`Backup status: ${currentBackup.status}`);
+                        
+                        switch (currentBackup.status) {
+                            case 'completed':
+                                core.info(`✓ Backup completed successfully`);
+                                result.backup = currentBackup; // Update with latest status
+                                loop = false;
+                                break;
+                            case 'failed':
+                                throw new Error(`Backup failed`);
+                            case 'running':
+                            case 'in_progress':
+                            default:
+                                core.info(`Backup still in progress...`);
+                                break;
+                        }
                     }
                 } catch (error) {
                     core.warning(`Failed to check backup status: ${error}. Retrying...`);
@@ -290,6 +315,7 @@ async function run(): Promise<void> {
                 }
                 
                 if (loop) {
+                    core.info(`Waiting ${waitInterval} seconds before next check...`);
                     await new Promise(resolve => setTimeout(resolve, waitInterval * 1000));
                 }
             }
@@ -300,7 +326,7 @@ async function run(): Promise<void> {
         
         switch (operation) {
             case 'create':
-                core.setOutput('backup_id', result.backup.id);
+                core.setOutput('backup_id', result.backup.backupId);
                 break;
             case 'list':
                 core.setOutput('backup_list', JSON.stringify(result.backups));
@@ -312,6 +338,10 @@ async function run(): Promise<void> {
                     core.setOutput('resolved_backup_name', result.resolvedBackupName);
                     core.setOutput('resolved_backup_created_at', result.resolvedBackupCreatedAt);
                 }
+                break;
+            case 'delete':
+                core.setOutput('deleted_count', result.deletedCount);
+                core.setOutput('deleted_backups', JSON.stringify(result.deletedBackups));
                 break;
         }
 

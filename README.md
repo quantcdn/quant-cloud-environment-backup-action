@@ -2,6 +2,8 @@
 
 Create, list, and download backups of environments in Quant Cloud. This action provides comprehensive backup management for disaster recovery and data protection, including CI/CD pipeline integration.
 
+**📚 [Local Testing Guide](./TESTING.md)** - Learn how to test this action locally before deploying
+
 ## Usage
 
 ### Create a Backup
@@ -29,6 +31,8 @@ Create, list, and download backups of environments in Quant Cloud. This action p
     app_name: my-app
     environment_name: my-environment
     operation: list
+    sort_order: desc  # Optional: asc or desc (always sorts by creation date)
+    filter_status: completed  # Optional: filter by status (completed, failed, running)
 ```
 
 ### Download a Specific Backup
@@ -55,15 +59,42 @@ Create, list, and download backups of environments in Quant Cloud. This action p
     backup_id: latest  # Automatically selects the most recent backup
 ```
 
+### Delete a Specific Backup
+```yaml
+- uses: quantcdn/quant-cloud-environment-backup-action@v1
+  with:
+    api_key: ${{ secrets.QUANT_API_KEY }}
+    organization: your-org-id
+    app_name: my-app
+    environment_name: my-environment
+    operation: delete
+    backup_id: backup-12345  # Specific backup to delete
+```
+
+### Delete Old Backups (Cleanup)
+```yaml
+- uses: quantcdn/quant-cloud-environment-backup-action@v1
+  with:
+    api_key: ${{ secrets.QUANT_API_KEY }}
+    organization: your-org-id
+    app_name: my-app
+    environment_name: my-environment
+    operation: delete
+    older_than_days: 30  # Delete backups older than 30 days
+```
+
 ## Inputs
 
 * `api_key`: Quant API key (required)
 * `organization`: Quant organisation ID (required)
 * `app_name`: Name of your application (required)
 * `environment_name`: Name of the environment to backup (required)
-* `operation`: Operation to perform - 'create', 'list', or 'download' (optional, default: 'create')
+* `operation`: Operation to perform - 'create', 'list', 'download', or 'delete' (optional, default: 'create')
 * `backup_name`: Name for the backup (optional, for create operation)
-* `backup_id`: ID of the backup to download (required for download operation). Use `"latest"` to automatically download the most recent backup.
+* `backup_id`: ID of the backup to download/delete. Use `"latest"` for most recent (download), or specify backup ID (download/delete). (optional)
+* `older_than_days`: For delete operation: Delete backups older than this many days (optional)
+* `sort_order`: For list operation: Sort order by creation date (`asc` or `desc`) (optional, default: 'desc')
+* `filter_status`: For list operation: Filter by backup status (`completed`, `failed`, `running`) (optional)
 * `type`: Type of data to backup - 'database' or 'filesystem' (optional, default: 'database')
 * `wait`: Whether to wait for the backup to complete (optional, default: 'false', only applies to create operation)
 * `wait_interval`: Interval in seconds between status checks (optional, default: '10')
@@ -79,6 +110,8 @@ Create, list, and download backups of environments in Quant Cloud. This action p
 * `resolved_backup_id`: Actual backup ID when using "latest" (download operation)
 * `resolved_backup_name`: Name of the resolved backup when using "latest" (download operation)
 * `resolved_backup_created_at`: Creation timestamp of the resolved backup when using "latest" (download operation)
+* `deleted_count`: Number of backups deleted (delete operation)
+* `deleted_backups`: JSON array of deleted backup IDs (delete operation)
 
 ## Wait Functionality
 
@@ -102,10 +135,12 @@ This action is designed to integrate seamlessly with your CI/CD workflows:
 - **Branch-based backups**: Create backups when specific branches are updated
 
 ### Backup Management
-- **List existing backups**: Query available backups to make restore decisions
+- **List existing backups**: Query available backups with sorting and filtering
+- **Advanced filtering**: Filter by status (completed/failed/running), sort by creation date (asc/desc)
 - **Download for restoration**: Download backups for environment restoration or data analysis
 - **Latest backup downloads**: Use `backup_id: latest` to automatically download the most recent backup
-- **Cleanup workflows**: List and manage old backups for storage optimization
+- **Automated cleanup**: Delete old backups based on age (e.g., older than 30 days)
+- **Targeted deletion**: Delete specific backups by ID for storage optimization
 
 ### Example Workflow
 ```yaml
@@ -160,4 +195,20 @@ jobs:
           echo "Download URL: ${{ steps.download.outputs.download_url }}"
           echo "Downloaded backup: ${{ steps.download.outputs.resolved_backup_name }}"
           echo "Backup created: ${{ steps.download.outputs.resolved_backup_created_at }}"
+
+      - name: Cleanup Old Backups
+        id: cleanup
+        uses: quantcdn/quant-cloud-environment-backup-action@v1
+        with:
+          api_key: ${{ secrets.QUANT_API_KEY }}
+          organization: ${{ vars.QUANT_ORG }}
+          app_name: ${{ vars.QUANT_APP }}
+          environment_name: production
+          operation: delete
+          older_than_days: 30
+
+      - name: Output Cleanup Results
+        run: |
+          echo "Deleted ${{ steps.cleanup.outputs.deleted_count }} old backups"
+          echo "Deleted backup IDs: ${{ steps.cleanup.outputs.deleted_backups }}"
 ```
