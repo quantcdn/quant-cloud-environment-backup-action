@@ -16,6 +16,7 @@ on:
         - create
         - list
         - download
+        - delete
       backup_id:
         description: 'Backup ID for download operation (use "latest" for most recent)'
         required: false
@@ -50,7 +51,6 @@ jobs:
           app_name: 'actions'
           organization: ${{ secrets.QUANT_ORGANIZATION }}
           type: ${{ inputs.type || 'database' }}
-          base_url: ${{ secrets.QUANT_BASE_URL }}
           wait: true
           
       - name: Debug Outputs
@@ -63,6 +63,8 @@ jobs:
           echo "Resolved Backup ID: ${{ steps.backup-operation.outputs.resolved_backup_id }}"
           echo "Resolved Backup Name: ${{ steps.backup-operation.outputs.resolved_backup_name }}"
           echo "Resolved Backup Created: ${{ steps.backup-operation.outputs.resolved_backup_created_at }}"
+          echo "Deleted Count: ${{ steps.backup-operation.outputs.deleted_count }}"
+          echo "Deleted Backups: ${{ steps.backup-operation.outputs.deleted_backups }}"
 
   # Test all operations automatically when pushing to main
   test-all-operations:
@@ -89,7 +91,6 @@ jobs:
           app_name: 'actions'
           organization: ${{ secrets.QUANT_ORGANIZATION }}
           type: 'database'
-          base_url: ${{ secrets.QUANT_BASE_URL }}
           wait: ${{ matrix.operation == 'create' && 'true' || 'false' }}
           
       - name: Validate ${{ matrix.operation }} output
@@ -130,3 +131,25 @@ jobs:
               echo "✅ Latest backup resolved: ${{ steps.test-operation.outputs.resolved_backup_name }}"
             fi
           fi
+  
+  # Cleanup test backups after successful tests
+  cleanup-test-backups:
+    runs-on: ubuntu-latest
+    if: github.event_name == 'push' && always()
+    needs: test-all-operations
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Delete old test backups
+        uses: ./
+        with:
+          api_key: ${{ secrets.QUANT_API_KEY }}
+          environment_name: 'staging'
+          operation: delete
+          older_than_days: 7
+          app_name: 'actions'
+          organization: ${{ secrets.QUANT_ORGANIZATION }}
+          type: 'database'
+      
+      - name: Show cleanup results
+        run: echo "Cleaned up test backups older than 7 days"
