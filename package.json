@@ -1,6 +1,6 @@
 {
   "name": "quant-cloud-environment-backup-action",
-  "version": "1.0.0",
+  "version": "1.1.0",
   "description": "GitHub Action for creating and managing backups of environments in Quant Cloud",
   "main": "dist/index.js",
   "scripts": {
