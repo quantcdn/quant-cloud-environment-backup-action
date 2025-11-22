@@ -36,14 +36,25 @@ on:
 jobs:
   test:
     runs-on: ubuntu-latest
+    services:
+      mock-api:
+        image: ghcr.io/quantcdn/quant-mock-api:4.3.0
+        ports:
+          - 4010:4010
+        options: >-
+          --health-cmd "nc -z 127.0.0.1 4010"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
 
       - name: Test backup operation
         uses: ./
         id: backup-operation
         with:
           api_key: ${{ secrets.QUANT_API_KEY }}
+          base_url: http://mock-api:4010
           environment_name: ${{ inputs.environment_name || 'staging' }}
           operation: ${{ inputs.operation || 'create' }}
           backup_id: ${{ inputs.backup_id }}
@@ -69,6 +80,16 @@ jobs:
   # Test all operations automatically when pushing to main
   test-all-operations:
     runs-on: ubuntu-latest
+    services:
+      mock-api:
+        image: ghcr.io/quantcdn/quant-mock-api:4.3.0
+        ports:
+          - 4010:4010
+        options: >-
+          --health-cmd "nc -z 127.0.0.1 4010"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
     if: github.event_name == 'push'
     strategy:
       matrix:
@@ -84,6 +105,7 @@ jobs:
         id: test-operation
         with:
           api_key: ${{ secrets.QUANT_API_KEY }}
+          base_url: http://mock-api:4010
           environment_name: 'staging'
           operation: ${{ matrix.operation }}
           backup_id: ${{ matrix.backup_id }}
