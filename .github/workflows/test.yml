@@ -37,7 +37,7 @@ jobs:
         ports:
           - 4010:4010
         options: >-
-          --health-cmd "wget --no-verbose --tries=1 --spider http://localhost:4010 || exit 1"
+          --health-cmd "nc -z 127.0.0.1 4010"
           --health-interval 10s
           --health-timeout 5s
           --health-retries 5
@@ -133,7 +133,7 @@ jobs:
         ports:
           - 4010:4010
         options: >-
-          --health-cmd "wget --no-verbose --tries=1 --spider http://localhost:4010 || exit 1"
+          --health-cmd "nc -z 127.0.0.1 4010"
           --health-interval 10s
           --health-timeout 5s
           --health-retries 5
