@@ -71,7 +71,8 @@ jobs:
           backup_id: ${{ matrix.backup_id }}
           backup_name: test-backup-${{ github.run_number }}
           # Wait for completion on create operations
-          wait: ${{ matrix.operation == 'create' && 'true' || 'false' }}
+          # NOTE: Must be false for mock API tests as the static mock won't return the new backup in the list
+          wait: false
           
       - name: Validate ${{ matrix.operation }} output
         run: |
@@ -152,7 +153,8 @@ jobs:
           operation: ${{ inputs.operation }}
           type: ${{ inputs.type }}
           backup_name: manual-test-backup-${{ github.run_number }}
-          wait: true
+          # NOTE: Must be false for mock API tests as the static mock won't return the new backup in the list
+          wait: false
           
       - name: Debug Outputs
         run: |
