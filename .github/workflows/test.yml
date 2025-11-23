@@ -60,7 +60,7 @@ jobs:
         with:
           # Use mock API credentials (any value works with mock)
           api_key: test-api-key-12345
-          base_url: http://mock-api:4010
+          base_url: http://localhost:4010
           # Use values that match mock API responses
           organization: test-org
           app_name: test-app
@@ -145,7 +145,7 @@ jobs:
         id: backup-operation
         with:
           api_key: test-api-key-12345
-          base_url: http://mock-api:4010
+          base_url: http://localhost:4010
           organization: test-org
           app_name: test-app
           environment_name: test-env
