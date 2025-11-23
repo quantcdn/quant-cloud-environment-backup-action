@@ -1,12 +1,14 @@
 name: Test Environment Backup
 
 on:
+  pull_request:
+    branches:
+      - main
+  push:
+    branches:
+      - main
   workflow_dispatch:
     inputs:
-      environment_name:
-        description: 'The name of the environment to backup/restore'
-        required: true
-        default: 'staging'
       operation:
         description: 'Operation to perform'
         required: true
@@ -17,10 +19,6 @@ on:
         - list
         - download
         - delete
-      backup_id:
-        description: 'Backup ID for download operation (use "latest" for most recent)'
-        required: false
-        default: 'latest'
       type:
         description: 'The type of data to backup'
         required: true
@@ -29,95 +27,55 @@ on:
         options:
         - database
         - filesystem
-  push:
-    branches:
-      - main
 
 jobs:
-  test:
-    runs-on: ubuntu-latest
-    services:
-      mock-api:
-        image: ghcr.io/quantcdn/quant-mock-api:4.3.0
-        ports:
-          - 4010:4010
-        options: >-
-          --health-cmd "nc -z 127.0.0.1 4010"
-          --health-interval 10s
-          --health-timeout 5s
-          --health-retries 5
-    steps:
-      - uses: actions/checkout@v5
-
-      - name: Test backup operation
-        uses: ./
-        id: backup-operation
-        with:
-          api_key: ${{ secrets.QUANT_API_KEY }}
-          base_url: http://mock-api:4010
-          environment_name: ${{ inputs.environment_name || 'staging' }}
-          operation: ${{ inputs.operation || 'create' }}
-          backup_id: ${{ inputs.backup_id }}
-          backup_name: test-backup-${{ github.run_number }}
-          app_name: 'actions'
-          organization: ${{ secrets.QUANT_ORGANIZATION }}
-          type: ${{ inputs.type || 'database' }}
-          wait: true
-          
-      - name: Debug Outputs
-        run: |
-          echo "Operation: ${{ inputs.operation || 'create' }}"
-          echo "Success: ${{ steps.backup-operation.outputs.success }}"
-          echo "Backup ID: ${{ steps.backup-operation.outputs.backup_id }}"
-          echo "Backup List: ${{ steps.backup-operation.outputs.backup_list }}"
-          echo "Download URL: ${{ steps.backup-operation.outputs.download_url }}"
-          echo "Resolved Backup ID: ${{ steps.backup-operation.outputs.resolved_backup_id }}"
-          echo "Resolved Backup Name: ${{ steps.backup-operation.outputs.resolved_backup_name }}"
-          echo "Resolved Backup Created: ${{ steps.backup-operation.outputs.resolved_backup_created_at }}"
-          echo "Deleted Count: ${{ steps.backup-operation.outputs.deleted_count }}"
-          echo "Deleted Backups: ${{ steps.backup-operation.outputs.deleted_backups }}"
-
-  # Test all operations automatically when pushing to main
   test-all-operations:
     runs-on: ubuntu-latest
     services:
       mock-api:
-        image: ghcr.io/quantcdn/quant-mock-api:4.3.0
+        image: ghcr.io/quantcdn/quant-mock-api:4.4.0-863533a
         ports:
           - 4010:4010
         options: >-
-          --health-cmd "nc -z 127.0.0.1 4010"
+          --health-cmd "wget --no-verbose --tries=1 --spider http://localhost:4010 || exit 1"
           --health-interval 10s
           --health-timeout 5s
           --health-retries 5
-    if: github.event_name == 'push'
     strategy:
+      fail-fast: false
       matrix:
-        operation: [create, list, download]
+        operation: [create, list, download, delete]
+        type: [database, filesystem]
         include:
           - operation: download
             backup_id: latest
+          - operation: delete
+            backup_id: backup-test-123
     steps:
       - uses: actions/checkout@v4
 
-      - name: Test ${{ matrix.operation }} operation
+      - name: Test ${{ matrix.operation }} ${{ matrix.type }} operation
         uses: ./
         id: test-operation
         with:
-          api_key: ${{ secrets.QUANT_API_KEY }}
+          # Use mock API credentials (any value works with mock)
+          api_key: test-api-key-12345
           base_url: http://mock-api:4010
-          environment_name: 'staging'
+          # Use values that match mock API responses
+          organization: test-org
+          app_name: test-app
+          environment_name: test-env
+          # Operation parameters
           operation: ${{ matrix.operation }}
+          type: ${{ matrix.type }}
           backup_id: ${{ matrix.backup_id }}
-          backup_name: auto-test-backup-${{ github.run_number }}
-          app_name: 'actions'
-          organization: ${{ secrets.QUANT_ORGANIZATION }}
-          type: 'database'
+          backup_name: test-backup-${{ github.run_number }}
+          # Wait for completion on create operations
           wait: ${{ matrix.operation == 'create' && 'true' || 'false' }}
           
       - name: Validate ${{ matrix.operation }} output
         run: |
-          echo "Testing ${{ matrix.operation }} operation"
+          echo "Testing ${{ matrix.operation }} ${{ matrix.type }} operation"
           echo "Success: ${{ steps.test-operation.outputs.success }}"
           
           # Validate operation-specific outputs
@@ -134,7 +92,8 @@ jobs:
               echo "❌ List operation should return backup_list"
               exit 1
             fi
-            echo "✅ List operation returned backup_list: ${{ steps.test-operation.outputs.backup_list }}"
+            echo "✅ List operation returned backup_list"
+            echo "${{ steps.test-operation.outputs.backup_list }}" | head -c 200
           fi
           
           if [ "${{ matrix.operation }}" == "download" ]; then
@@ -151,27 +110,60 @@ jobs:
                 exit 1
               fi
               echo "✅ Latest backup resolved: ${{ steps.test-operation.outputs.resolved_backup_name }}"
+              echo "   Backup ID: ${{ steps.test-operation.outputs.resolved_backup_id }}"
+              echo "   Created at: ${{ steps.test-operation.outputs.resolved_backup_created_at }}"
             fi
           fi
-  
-  # Cleanup test backups after successful tests
-  cleanup-test-backups:
+          
+          if [ "${{ matrix.operation }}" == "delete" ]; then
+            if [ -z "${{ steps.test-operation.outputs.deleted_count }}" ]; then
+              echo "❌ Delete operation should return deleted_count"
+              exit 1
+            fi
+            echo "✅ Delete operation deleted ${{ steps.test-operation.outputs.deleted_count }} backup(s)"
+          fi
+
+  # Manual test job for workflow_dispatch
+  manual-test:
     runs-on: ubuntu-latest
-    if: github.event_name == 'push' && always()
-    needs: test-all-operations
+    if: github.event_name == 'workflow_dispatch'
+    services:
+      mock-api:
+        image: ghcr.io/quantcdn/quant-mock-api:4.4.0-863533a
+        ports:
+          - 4010:4010
+        options: >-
+          --health-cmd "wget --no-verbose --tries=1 --spider http://localhost:4010 || exit 1"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
     steps:
       - uses: actions/checkout@v4
 
-      - name: Delete old test backups
+      - name: Test ${{ inputs.operation }} operation
         uses: ./
+        id: backup-operation
         with:
-          api_key: ${{ secrets.QUANT_API_KEY }}
-          environment_name: 'staging'
-          operation: delete
-          older_than_days: 7
-          app_name: 'actions'
-          organization: ${{ secrets.QUANT_ORGANIZATION }}
-          type: 'database'
-      
-      - name: Show cleanup results
-        run: echo "Cleaned up test backups older than 7 days"
+          api_key: test-api-key-12345
+          base_url: http://mock-api:4010
+          organization: test-org
+          app_name: test-app
+          environment_name: test-env
+          operation: ${{ inputs.operation }}
+          type: ${{ inputs.type }}
+          backup_name: manual-test-backup-${{ github.run_number }}
+          wait: true
+          
+      - name: Debug Outputs
+        run: |
+          echo "Operation: ${{ inputs.operation }}"
+          echo "Type: ${{ inputs.type }}"
+          echo "Success: ${{ steps.backup-operation.outputs.success }}"
+          echo "Backup ID: ${{ steps.backup-operation.outputs.backup_id }}"
+          echo "Backup List: ${{ steps.backup-operation.outputs.backup_list }}"
+          echo "Download URL: ${{ steps.backup-operation.outputs.download_url }}"
+          echo "Resolved Backup ID: ${{ steps.backup-operation.outputs.resolved_backup_id }}"
+          echo "Resolved Backup Name: ${{ steps.backup-operation.outputs.resolved_backup_name }}"
+          echo "Resolved Backup Created: ${{ steps.backup-operation.outputs.resolved_backup_created_at }}"
+          echo "Deleted Count: ${{ steps.backup-operation.outputs.deleted_count }}"
+          echo "Deleted Backups: ${{ steps.backup-operation.outputs.deleted_backups }}"
