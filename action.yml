@@ -77,5 +77,5 @@ outputs:
     description: 'Whether the operation was successful'
     value: true
 runs:
-  using: 'node20'
+  using: 'node24'
   main: 'dist/index.js' 
