@@ -14,7 +14,7 @@
     "@quantcdn/quant-client": "^4.3.0"
   },
   "devDependencies": {
-    "@types/node": "^24.0.0",
+    "@types/node": "^24.13.5",
     "@vercel/ncc": "^0.38.4",
     "ts-node": "^10.9.2",
     "typescript": "^5.9.3"
