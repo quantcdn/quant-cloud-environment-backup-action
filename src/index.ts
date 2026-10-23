@@ -200,8 +200,12 @@ async function run(): Promise<void> {
                     actualBackupId
                 );
                 const downloadUrl = downloadResponse.data.downloadUrl;
+                // The signed URL grants access to the backup: mask it before any log or output.
+                if (downloadUrl) {
+                    core.setSecret(downloadUrl);
+                }
                 result = { ...result, downloadUrl };
-                core.info(`Download URL obtained: ${downloadUrl}`);
+                core.info('Download URL obtained (masked in logs; available in the download_url output)');
                 if (downloadResponse.data.expiresAt) {
                     core.info(`URL expires at: ${downloadResponse.data.expiresAt}`);
                 }
