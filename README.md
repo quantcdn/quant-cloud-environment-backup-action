@@ -106,7 +106,7 @@ Create, list, and download backups of environments in Quant Cloud. This action p
 * `success`: Whether the operation was successful (boolean)
 * `backup_id`: ID of the created backup (create operation)
 * `backup_list`: JSON array of available backups (list operation)
-* `download_url`: Download URL for the backup (download operation)
+* `download_url`: Signed download URL for the backup (download operation). The URL is masked in workflow logs (`***`), but the output value is usable in later steps. Treat it as a secret.
 * `resolved_backup_id`: Actual backup ID when using "latest" (download operation)
 * `resolved_backup_name`: Name of the resolved backup when using "latest" (download operation)
 * `resolved_backup_created_at`: Creation timestamp of the resolved backup when using "latest" (download operation)
@@ -212,3 +212,7 @@ jobs:
           echo "Deleted ${{ steps.cleanup.outputs.deleted_count }} old backups"
           echo "Deleted backup IDs: ${{ steps.cleanup.outputs.deleted_backups }}"
 ```
+
+## Unreleased
+
+* Fix: the signed download URL is now masked in logs (`core.setSecret`) and is no longer printed by the `download` operation.
