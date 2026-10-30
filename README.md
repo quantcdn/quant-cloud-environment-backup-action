@@ -118,7 +118,7 @@ Create, list, and download backups of environments in Quant Cloud. This action p
 When `wait` is set to `true`, the action will monitor the backup operation status and wait for completion:
 
 - Checks backup status every `wait_interval` seconds
-- Times out after `max_retries` attempts 
+- Times out after `max_retries` attempts
 - Provides detailed logging of backup progress
 - Handles API errors gracefully with retry logic
 - Default timeout: 30 retries × 10 seconds = 5 minutes
@@ -216,3 +216,12 @@ jobs:
 ## Unreleased
 
 * Fix: the signed download URL is now masked in logs (`core.setSecret`) and is no longer printed by the `download` operation.
+
+## Runner security requirement
+
+This action uses the runner's embedded Node 24, which must be 24.22.1 or later
+for CVE-2026-111497. Update self-hosted runner containers/binaries to apply the
+fix. A `setup-node` workflow step changes the job shell runtime, not the Node
+binary GitHub uses to execute actions. A pre-run check rejects vulnerable
+runner versions before action API calls. Use the current maintained action tag
+or its immutable release SHA; historical pinned releases do not update themselves.

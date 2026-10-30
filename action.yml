@@ -78,4 +78,5 @@ outputs:
     value: true
 runs:
   using: 'node24'
+  pre: 'runtime-check.cjs'
   main: 'dist/index.js' 
